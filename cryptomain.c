@@ -4,7 +4,6 @@
 #include <stdio.h>
 #include <openssl/rand.h>
 
-
 int aes_encrypt(const unsigned char *plaintext, int plaintext_len, const unsigned char *key, const unsigned char *iv, unsigned char *ciphertext) {
     EVP_CIPHER_CTX *ctx;
     int len;
@@ -36,7 +35,6 @@ int aes_encrypt(const unsigned char *plaintext, int plaintext_len, const unsigne
     return ciphertext_len;
 }
 
-
 void sha1_hash(const unsigned char *input, size_t input_len, unsigned char *output) {
     EVP_MD_CTX *ctx = EVP_MD_CTX_new();
     if (!ctx) {
@@ -58,38 +56,6 @@ void print_hash(const char *label, const unsigned char *hash, size_t hash_len) {
         printf("%02x", hash[i]);
     }
     printf("\n");
-}
-
-void write_encrypted_data_to_file(const char *filename, unsigned char *iv, unsigned char *ciphertext, int ciphertext_len) {
-    FILE *file = fopen(filename, "wb");
-    if (!file) {
-        printf("Erreur lors de l'ouverture du fichier\n");
-        return;
-    }
-
-    // Enregistrer l'IV
-    if (fwrite(iv, 1, SHA_DIGEST_LENGTH, file) != SHA_DIGEST_LENGTH) {
-        printf("Erreur lors de l'écriture de l'IV dans le fichier\n");
-        fclose(file);
-        return;
-    }
-
-    // Enregistrer la longueur du message chiffré
-    if (fwrite(&ciphertext_len, sizeof(int), 1, file) != 1) {
-        printf("Erreur lors de l'écriture de la longueur du message chiffré\n");
-        fclose(file);
-        return;
-    }
-
-    // Enregistrer ensuite le message chiffré
-    if (fwrite(ciphertext, 1, ciphertext_len, file) != ciphertext_len) {
-        printf("Erreur lors de l'écriture du message chiffré dans le fichier\n");
-        fclose(file);
-        return;
-    }
-
-    printf("Données chiffrées et IV enregistrées dans '%s'\n", filename);
-    fclose(file);
 }
 
 int aes_decrypt(const unsigned char *ciphertext, int ciphertext_len, const unsigned char *key, const unsigned char *iv, unsigned char *plaintext) {
@@ -123,72 +89,43 @@ int aes_decrypt(const unsigned char *ciphertext, int ciphertext_len, const unsig
     return plaintext_len;
 }
 
-int read_encrypted_data_from_file(const char *filename, unsigned char *iv, unsigned char *ciphertext, int *ciphertext_len) {
-    FILE *file = fopen(filename, "rb");
-    if (!file) {
-        printf("Erreur lors de l'ouverture du fichier pour la lecture\n");
-        return 0;
-    }
-
-    // Lire l'IV d'abord
-    if (fread(iv, 1, SHA_DIGEST_LENGTH, file) != SHA_DIGEST_LENGTH) {
-        printf("Erreur lors de la lecture de l'IV\n");
-        fclose(file);
-        return 0;
-    }
-
-    // Lire la longueur du message chiffré
-    if (fread(ciphertext_len, sizeof(int), 1, file) != 1) {
-        printf("Erreur lors de la lecture de la longueur du message chiffré\n");
-        fclose(file);
-        return 0;
-    }
-
-    // Lire le message chiffré ensuite
-    if (fread(ciphertext, 1, *ciphertext_len, file) != *ciphertext_len) {
-        printf("Erreur lors de la lecture du message chiffré\n");
-        fclose(file);
-        return 0;
-    }
-
-    fclose(file);
-    return 1;  // Succès
-}
-
 int main() {
     char input;
-    printf("voulez vous chiffrer ou déchiffrer? c pour chiffrer, d pour déchiffrer\n");
+    int ciphertext_len;
+    printf("Voulez-vous chiffrer ou déchiffrer ? (c pour chiffrer, d pour déchiffrer) : ");
     scanf(" %c", &input);
-    switch(input)
-    {
-        case 'c':
+    getchar(); 
+
+    switch (input) {
+        case 'c': {
             char password[16];
             char message[256];
             unsigned char buffer[16];
             RAND_bytes(buffer, 16);
+            //char message2[5] = "oooo";
+            
             printf("Entrez un mot de passe : ");
             fgets(password, sizeof(password), stdin);
-            password[strcspn(password, "\n")] = '\0';  
+            password[strcspn(password, "\n")] = '\0';
 
             printf("Entrez un message à chiffrer : ");
             fgets(message, sizeof(message), stdin);
-            message[strcspn(message, "\n")] = '\0';  
-
-            unsigned char iv[SHA_DIGEST_LENGTH];
+            message[strcspn(message, "\n")] = '\0';
+            //strncpy(message2,message, 5);
+            //printf("%s",message);
+            unsigned char iv[16];
             unsigned char key[16];
             unsigned char ciphertext[256];
 
             
             sha1_hash((unsigned char *)password, strlen(password), key);
-            print_hash("key (SHA1 du mot de passe)", key, 16);
+            print_hash("Clé (SHA1 du mot de passe)", key, 16);
 
-            
-            sha1_hash((unsigned char *)buffer, 16, iv);
-            print_hash("IV", iv, SHA_DIGEST_LENGTH);
+            sha1_hash(buffer, 16, iv);
+            print_hash("IV", iv, 16);
 
-            
-            int ciphertext_len = aes_encrypt((unsigned char *)message, strlen(message), key, iv, ciphertext);
-
+            // Chiffrement du message
+            ciphertext_len = aes_encrypt((unsigned char *)message, strlen(message), key, iv, ciphertext);
             if (ciphertext_len < 0) {
                 printf("Erreur lors du chiffrement\n");
                 return 1;
@@ -199,28 +136,96 @@ int main() {
                 printf("%02x", ciphertext[i]);
             }
             printf("\n");
-             // Enregistrer l'IV et le message chiffré dans un fichier
-            FILE *file = fopen("./cypted/encrypted_data.bin", "wb");
+
+            // Enregistrement dans les fichiers
+            FILE *file = fopen("./encrypted_data.bin", "wb");
             if (!file) {
                 printf("Erreur lors de l'ouverture du fichier\n");
                 return 1;
             }
 
-            // Enregistrer d'abord l'IV
-            if (fwrite(iv, 1, SHA_DIGEST_LENGTH, file) != SHA_DIGEST_LENGTH) {
+            FILE *fileiv = fopen("./encrypted_IV.bin", "wb");
+            if (!fileiv) {
+                printf("Erreur lors de l'ouverture du fichier pour IV\n");
+                return 1;
+            }
+
+            // Enregistrer l'IV dans un fichier
+            if (fwrite(iv, 1, 16, fileiv) != 16) {
                 printf("Erreur lors de l'écriture de l'IV dans le fichier\n");
                 fclose(file);
+                fclose(fileiv);
+                return 1;
+            }
+            fclose(fileiv);
+
+            // Enregistrer le message chiffré dans un fichier
+            if (fwrite(ciphertext, 1, (size_t)ciphertext_len, file) != (size_t)ciphertext_len) {
+                printf("Erreur lors de l'écriture du message chiffré\n");
+            }
+            fclose(file);
+            break;
+        }
+        case 'd': {
+            char password[16];
+            unsigned char iv[16];
+            unsigned char key[16];
+            unsigned char ciphertext[256];
+            unsigned char decrypted_message[256];
+
+            FILE *file = fopen("./encrypted_data.bin", "rb");
+            if (!file) {
+                printf("Erreur lors de l'ouverture du fichier de données chiffrées\n");
                 return 1;
             }
 
-    // Enregistrer ensuite le message chiffré
-            if (fwrite(ciphertext, 1, ciphertext_len, file) != ciphertext_len) {
-                printf("Erreur lors de l'écriture du message chiffré dans le fichier\n");
+            FILE *fileiv = fopen("./encrypted_IV.bin", "rb");
+            if (!fileiv) {
+                printf("Erreur lors de l'ouverture du fichier IV\n");
                 fclose(file);
                 return 1;
             }
 
-   
-    }             
+            printf("Entrez un mot de passe : ");
+            fgets(password, sizeof(password), stdin);
+            password[strcspn(password, "\n")] = '\0';
+
+            
+            if (fread(iv, 1, 16, fileiv) != 16) {
+                printf("Erreur lors de la lecture de l'IV depuis le fichier\n");
+                fclose(file);
+                fclose(fileiv);
+                return 1;
+            }
+            fclose(fileiv);
+
+        
+            fseek(file, 0, SEEK_END);
+            ciphertext_len = ftell(file);  // Obtenir la taille du texte chiffré
+            fseek(file, 0, SEEK_SET);
+            if (fread(ciphertext, 1, ciphertext_len, file) != (size_t)(ciphertext_len)) {
+                printf("Erreur lors de la lecture du message chiffré\n");
+            }
+            fclose(file);
+
+            // Génération de la clé
+            sha1_hash((unsigned char *)password, strlen(password), key);
+            print_hash("Clé (SHA1 du mot de passe)", key, 16);
+
+            // Déchiffrement du message
+            int decrypted_len = aes_decrypt(ciphertext, ciphertext_len, key, iv, decrypted_message);
+            if (decrypted_len < 0) {
+                printf("Erreur lors du déchiffrement\n");
+                return 1;
+            }
+
+            decrypted_message[decrypted_len] = '\0';
+            printf("Message déchiffré : %s\n", decrypted_message);
+            break;
+        }
+        default:
+            printf("Option invalide\n");
+    }
+
     return 0;
 }
